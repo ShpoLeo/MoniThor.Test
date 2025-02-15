@@ -1,37 +1,52 @@
-from locust import HttpUser, TaskSet, task, between
-import json
+from locust import HttpUser, task, between
 import random
+import json
 
-class UserBehavior(TaskSet):
+class UserBehavior(HttpUser):
     wait_time = between(1, 2)
-    def on_start(self):
-        """Executed when a Locust user starts (e.g., logs in)."""
-        self.username = f"locust_user_{random.randint(1000, 9999)}"
-        self.password = "password"
-        self.login()
-
-    def login(self):
-        response = self.client.post("/BElogin", json={
-            "username": self.username,
-            "password": self.password
-        })
-        if response.status_code == 200:
-            print("Login successful")
-        else:
-            print("Login failed")
-
-    @task
-    def add_new_domain(self):
-        domain_name = "example.com"
-        response = self.client.get(f"/BEadd_domain/{domain_name}/{self.username}")
-        print(f"Add Domain Response: {response.status_code} - {response.text}")
-
-    @task
-    def upload_file(self):
-        filename = "../testdata/Domains_for_upload.txt"
-        response = self.client.get(f"/BEbulk_upload/{filename}/{self.username}")
-        print(f"Bulk Upload Response: {response.status_code} - {response.text}")
-
-class WebsiteUser(HttpUser):
-    tasks = [UserBehavior]
     
+    def load_domains_from_file(self):
+        """Load domains from the test file"""
+        try:
+            with open('./testdata/domain_test.txt', 'r') as file:
+                domains = [line.strip() for line in file if line.strip()]
+            print(f"Loaded {len(domains)} domains from file")
+            return domains
+        except Exception as e:
+            print(f"Error loading domains: {e}")
+            return []
+        
+    def on_start(self):
+        """Setup and login before starting tests"""
+        self.username = f"locust_user_{random.randint(1,500)}"
+        self.client.post("/BEregister", data={
+            "username": self.username,
+            "password": "password"
+        })
+        self.login()
+        self.domains = self.load_domains_from_file()
+        print(f"User {self.username} initialized with {len(self.domains)} domains")
+    
+    def login(self):
+        response = self.client.post("/BElogin", data={
+            "username": self.username,
+            "password": "password"
+        })
+
+    @task
+    def single_domain_check(self):
+        """Test checking a single domain"""
+        print(f"User {self.username} starting single check of {self.domains[0]}")
+        response = self.client.post("/BEadd_domain", json={
+            "domain": self.domains[0]
+        })
+        print(f"Single check completed for {self.username}. Status: {response.status_code}")
+
+    # @task
+    # def bulk_domain_check(self):
+    #     """Test checking all domains from file"""
+    #     print(f"User {self.username} starting bulk check of {len(self.domains)} domains")
+    #     response = self.client.post("/BEbulk_upload", json={
+    #         "domains": self.domains
+    #     })
+    #     print(f"Bulk check completed for {self.username}. Status: {response.status_code}")
